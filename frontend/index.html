@@ -4,101 +4,106 @@
     <meta charset="UTF-8" />
     <title>Plagiarism Detector</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <link rel="stylesheet" href="styles.css" />
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css?v=3" />
   </head>
   <body>
     <div class="app-shell">
       <header class="app-header">
         <div class="brand">
-          <span class="logo-dot"></span>
+          <div class="shield-icon">
+             <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
+          </div>
           <h1>Plagiarism Detector</h1>
         </div>
         <p class="subtitle">
-          Paste student text and compare it against your reference database.
+          AI-Powered Plagiarism Detector
         </p>
       </header>
 
       <main class="app-main">
         <section class="card input-card">
-          <div class="card-header">
-            <h2>Student Input</h2>
-            <p>Paste the text you want to analyse for plagiarism.</p>
-          </div>
-
           <form id="detect-form" class="form">
-            <label for="text" class="field-label">
-              Student text
-              <span class="label-hint">(multiple sentences are allowed)</span>
-            </label>
-            <textarea
-              id="text"
-              name="text"
-              class="text-input"
-              rows="8"
-              placeholder="Paste or type the student's answer here..."
-              required
-            ></textarea>
+            <div class="input-group">
+                <label for="text" class="field-label">Student Text</label>
+                <div class="textarea-wrapper">
+                    <textarea
+                    id="text"
+                    name="text"
+                    class="text-input"
+                    rows="8"
+                    placeholder="Paste or type the student's text here..."
+                    ></textarea>
+                    <div class="word-count" id="word-count">0 words | 0 chars</div>
+                </div>
+            </div>
+
+            <div class="divider"><span>OR</span></div>
+
+            <div class="input-group">
+                <label class="field-label">Upload Document</label>
+                <div class="file-drop-zone" id="file-drop-zone">
+                    <input type="file" id="file-upload" accept=".txt,.pdf" hidden />
+                    <svg class="upload-icon" xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+                    <p class="drop-text" id="drop-text">Drag & drop a .txt or .pdf file here, or <span class="browse-link">browse</span></p>
+                    <div class="file-info" id="file-info" style="display: none;">
+                        <span id="file-name" class="file-name">filename.txt</span>
+                        <span id="file-size" class="file-size">(1.2 MB)</span>
+                        <button type="button" id="remove-file" class="remove-file" aria-label="Remove file">×</button>
+                    </div>
+                </div>
+            </div>
 
             <div class="form-footer">
               <button type="submit" class="primary-button" id="run-button">
-                Run detection
+                <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                Check Plagiarism
               </button>
-              <span class="status-text" id="status-text"></span>
+              <div class="status-container">
+                  <div class="scanner-bar" id="scanner-bar" hidden></div>
+                  <span class="status-text" id="status-text"></span>
+              </div>
             </div>
           </form>
         </section>
 
-        <section class="card results-card">
-          <div class="card-header">
-            <h2>Results</h2>
-            <p>Summary and sentence‑level breakdown of the detection.</p>
-          </div>
-
-          <div id="summary" class="summary" hidden>
-            <div class="summary-item">
-              <span class="summary-label">Total sentences</span>
-              <span class="summary-value" id="summary-total">0</span>
-            </div>
-            <div class="summary-item">
-              <span class="summary-label">Plagiarized sentences</span>
-              <span class="summary-value" id="summary-plag">0</span>
-            </div>
-            <div class="summary-item">
-              <span class="summary-label">Plagiarism percentage</span>
-              <span
-                class="summary-value summary-badge"
-                id="summary-percent"
-              ></span>
-            </div>
-          </div>
-
+        <section class="card results-card" id="results-card">
           <div id="no-results" class="empty-state">
-            Run detection to see sentence‑level results here.
+            <svg xmlns="http://www.w3.org/2000/svg" width="60" height="60" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="opacity: 0.5;"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+            <p>Run detection to see results here.</p>
           </div>
 
-          <div class="table-wrapper" id="table-wrapper" hidden>
-            <table class="results-table" id="results-table">
-              <thead>
-                <tr>
-                  <th>#</th>
-                  <th>Student sentence</th>
-                  <th>Matched source</th>
-                  <th>Similarity</th>
-                  <th>Category</th>
-                </tr>
-              </thead>
-              <tbody></tbody>
-            </table>
+          <div id="results-content" class="results-content" hidden>
+            <div class="score-sticky-header">
+                <div class="stats-left">
+                    <div class="stat-item">
+                        <span class="stat-label">Total Sentences</span>
+                        <span class="stat-value" id="summary-total">0</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Plagiarized</span>
+                        <span class="stat-value highlight" id="summary-plag">0</span>
+                    </div>
+                </div>
+                <div class="progress-ring-container">
+                    <svg class="progress-ring" width="90" height="90">
+                        <circle class="progress-ring-bg" stroke="rgba(255,255,255,0.08)" stroke-width="7" fill="transparent" r="38" cx="45" cy="45"/>
+                        <circle class="progress-ring-circle" id="score-ring" stroke="#3b82f6" stroke-width="7" stroke-linecap="round" fill="transparent" r="38" cx="45" cy="45" stroke-dasharray="238.76" stroke-dashoffset="238.76"/>
+                    </svg>
+                    <div class="progress-ring-text" id="score-text">0%</div>
+                </div>
+            </div>
+            
+            <div class="results-list" id="results-list">
+                <!-- Sentence cards will be injected here -->
+            </div>
           </div>
         </section>
       </main>
-
-      <footer class="app-footer">
-        <span>Backend: FastAPI · Model: Sentence Transformers</span>
-      </footer>
     </div>
 
-    <script src="main.js"></script>
+    <script src="main.js?v=3"></script>
   </body>
 </html>
-
