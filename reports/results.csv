@@ -1,2 +1,11 @@
 Student Sentence,Matched Source,Similarity Score,Category
-I am in love with you.,I am not in love with you.,0.476,Original
+Artificial intelligence is transforming industries across the world.,Artificial Intelligence is transforming modern industries across the world.,0.989,Copied
+Machines can now perform tasks that normally require human intelligence.,It enables machines to perform tasks that normally require human intelligence.,0.814,Paraphrased
+Many companies are using AI technologies to increase efficiency.,Many organizations are adopting AI to improve efficiency and productivity.,0.679,Paraphrased
+Climate change is a serious global issue affecting ecosystems.,Climate change is one of the most serious challenges facing the world today.,0.784,Paraphrased
+Countries are trying to reduce greenhouse gas emissions to protect the planet.,Many countries are working together to reduce greenhouse gas emissions.,0.903,Paraphrased
+Renewable energy sources like solar power are becoming more common.,Renewable energy sources such as solar and wind power are gaining popularity.,0.946,Paraphrased
+Education is important for personal and professional development.,Education empowers individuals to achieve their goals.,0.75,Paraphrased
+Students can access large amounts of information through the internet.,Students can access a vast amount of information through the internet.,0.992,Copied
+Digital learning platforms make education more accessible.,Online learning platforms allow students to study from anywhere.,0.666,Paraphrased
+Regular physical exercise is important for maintaining good health.,Individuals can contribute by reducing waste and conserving energy.,0.255,Original
