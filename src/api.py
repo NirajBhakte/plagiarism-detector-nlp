@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import os
 
-from detector import PlagiarismDetector
+from .detector import PlagiarismDetector
 
 
 class DetectRequest(BaseModel):

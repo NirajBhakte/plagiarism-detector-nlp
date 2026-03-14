@@ -4,9 +4,9 @@ import os
 import pickle
 import pandas as pd
 
-from preprocess import preprocess_file, clean_text, split_into_sentences
-from embedder import SentenceEmbedder
-from similarity import find_best_matches
+from .preprocess import preprocess_file, clean_text, split_into_sentences
+from .embedder import SentenceEmbedder
+from .similarity import find_best_matches
 
 
 # ---------------- CONFIG ---------------- #
@@ -83,15 +83,29 @@ class PlagiarismDetector:
 
     # --------- Load Saved Database --------- #
 
+    def _reference_files_modified(self):
+        if not os.path.exists(EMBEDDING_FILE):
+            return True
+
+        db_mtime = os.path.getmtime(EMBEDDING_FILE)
+
+        for file in os.listdir(REFERENCE_DIR):
+            path = os.path.join(REFERENCE_DIR, file)
+            if file.endswith(".txt") and os.path.getmtime(path) > db_mtime:
+                return True
+
+        return False
+
     def load_database(self):
 
         if not os.path.exists(EMBEDDING_FILE):
-
             print("No database found. Building new one...")
+            self.build_database()
+        elif self._reference_files_modified():
+            print("Reference files changed. Rebuilding database...")
             self.build_database()
 
         with open(EMBEDDING_FILE, "rb") as f:
-
             self.db_sentences, self.db_embeddings = pickle.load(f)
 
         print("Reference database loaded!")
