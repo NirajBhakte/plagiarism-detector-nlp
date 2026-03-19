@@ -36,6 +36,19 @@ class DetectResponse(BaseModel):
     results               : list[DetectResultItem]
 
 
+class ReportRequest(BaseModel):
+    """
+    The frontend sends the full DetectResponse JSON back to generate a report.
+    This means the PDF always matches exactly what was shown on screen —
+    no re-running detection, no stale results.
+    """
+    total_sentences       : int
+    plagiarized_sentences : int
+    plagiarism_percent    : float
+    source_breakdown      : dict[str, float] = {}
+    results               : list[DetectResultItem]
+
+
 # ─────────────────────── App ─────────────────────────────── #
 
 app = FastAPI(title="Plagiarism Detector API", version="1.0.0")
@@ -72,7 +85,7 @@ def _build_response(summary: dict) -> DetectResponse:
     )
 
 
-# ─────────────────────── Endpoints ───────────────────────── #
+# ─────────────────────── Detection Endpoints ─────────────── #
 
 @app.post("/api/detect", response_model=DetectResponse)
 def detect_text(request: DetectRequest):
@@ -126,9 +139,9 @@ async def detect_with_reference(
 
     try:
         summary = detector.detect_with_dynamic_references(
-            student_bytes=s_bytes,
-            student_filename=student_file.filename or "student.txt",
-            reference_files=ref_data_list,
+            student_bytes    = s_bytes,
+            student_filename = student_file.filename or "student.txt",
+            reference_files  = ref_data_list,
         )
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
@@ -137,18 +150,41 @@ async def detect_with_reference(
     return _build_response(summary)
 
 
-@app.post("/api/report")
-def download_report(request: DetectRequest):
-    """
-    Re-runs detection on the submitted text and returns a PDF report.
-    Called by the Download Report button in the frontend.
-    """
-    if not request.text.strip():
-        raise HTTPException(status_code=400, detail="Text cannot be empty.")
+# ─────────────────────── Report Endpoint ─────────────────── #
 
-    summary   = detector.detect_from_text(request.text)
-    results   = summary["results"]
-    pdf_bytes = generate_pdf_report_bytes(results, summary)
+@app.post("/api/report-from-result")
+def report_from_result(request: ReportRequest):
+    """
+    Generates a PDF report from the detection result stored in the frontend.
+
+    ✅ This is the correct approach:
+    - The frontend stores the full JSON response after detection
+    - On "Download Report" click it sends that stored JSON here
+    - We build the PDF directly from it — no re-running detection
+    - The PDF always matches exactly what was shown on screen
+    - Works for ALL modes: text input, file upload, file vs reference
+    """
+    # Convert Pydantic models back to the dict format report_generator expects
+    results_dicts = [
+        {
+            "Student Sentence" : r.student_sentence,
+            "Matched Source"   : r.matched_source,
+            "Source File"      : r.source_file,
+            "Similarity Score" : r.similarity_score,
+            "Category"         : r.category,
+        }
+        for r in request.results
+    ]
+
+    summary = {
+        "total_sentences"      : request.total_sentences,
+        "plagiarized_sentences": request.plagiarized_sentences,
+        "plagiarism_percent"   : request.plagiarism_percent,
+        "source_breakdown"     : request.source_breakdown,
+        "results"              : results_dicts,
+    }
+
+    pdf_bytes = generate_pdf_report_bytes(results_dicts, summary)
 
     return StreamingResponse(
         io.BytesIO(pdf_bytes),
