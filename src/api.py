@@ -3,6 +3,7 @@
 import os
 import io
 from typing import List
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -37,11 +38,6 @@ class DetectResponse(BaseModel):
 
 
 class ReportRequest(BaseModel):
-    """
-    The frontend sends the full DetectResponse JSON back to generate a report.
-    This means the PDF always matches exactly what was shown on screen —
-    no re-running detection, no stale results.
-    """
     total_sentences       : int
     plagiarized_sentences : int
     plagiarism_percent    : float
@@ -49,18 +45,41 @@ class ReportRequest(BaseModel):
     results               : list[DetectResultItem]
 
 
+# ─────────────────────── Detector (lazy) ─────────────────── #
+# ✅ Instantiate the object here but do NOT call load_database() yet.
+# load_database() triggers SBERT model download + embedding build
+# which takes 30-60s and causes Render to time out before the port opens.
+# The lifespan function below calls it AFTER the port is already bound.
+
+detector = PlagiarismDetector()
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Runs after the server binds to the port — Render sees the port immediately
+    # and won't time out while the model loads in the background.
+    print("Loading SBERT model and reference database...")
+    detector.load_database()
+    print("Detector ready.")
+    yield
+    # (anything after yield runs on shutdown — nothing needed here)
+
+
 # ─────────────────────── App ─────────────────────────────── #
 
-app = FastAPI(title="Plagiarism Detector API", version="1.0.0")
+app = FastAPI(
+    title    = "Plagiarism Detector API",
+    version  = "1.0.0",
+    lifespan = lifespan,          # ← replaces the old @app.on_event("startup")
+)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"], allow_credentials=True,
-    allow_methods=["*"], allow_headers=["*"],
+    allow_origins     = ["*"],
+    allow_credentials = True,
+    allow_methods     = ["*"],
+    allow_headers     = ["*"],
 )
-
-detector = PlagiarismDetector()
-detector.load_database()
 
 
 # ─────────────────────── Helper ──────────────────────────── #
@@ -154,17 +173,6 @@ async def detect_with_reference(
 
 @app.post("/api/report-from-result")
 def report_from_result(request: ReportRequest):
-    """
-    Generates a PDF report from the detection result stored in the frontend.
-
-    ✅ This is the correct approach:
-    - The frontend stores the full JSON response after detection
-    - On "Download Report" click it sends that stored JSON here
-    - We build the PDF directly from it — no re-running detection
-    - The PDF always matches exactly what was shown on screen
-    - Works for ALL modes: text input, file upload, file vs reference
-    """
-    # Convert Pydantic models back to the dict format report_generator expects
     results_dicts = [
         {
             "Student Sentence" : r.student_sentence,
@@ -188,12 +196,12 @@ def report_from_result(request: ReportRequest):
 
     return StreamingResponse(
         io.BytesIO(pdf_bytes),
-        media_type="application/pdf",
-        headers={"Content-Disposition": 'attachment; filename="plagiarism_report.pdf"'},
+        media_type = "application/pdf",
+        headers    = {"Content-Disposition": 'attachment; filename="plagiarism_report.pdf"'},
     )
 
 
-# ─────────────────────── Static ──────────────────────────── #
+# ─────────────────────── Static Frontend ─────────────────── #
 
 BASE_DIR     = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 FRONTEND_DIR = os.path.join(BASE_DIR, "frontend")
