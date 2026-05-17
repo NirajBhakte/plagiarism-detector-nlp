@@ -1,6 +1,5 @@
 # src/embedder.py
 
-from sentence_transformers import SentenceTransformer
 import numpy as np
 
 
@@ -10,6 +9,8 @@ class SentenceEmbedder:
     """
 
     def __init__(self, model_name="all-mpnet-base-v2"):
+        # Lazy import — torch/sentence-transformers are huge; defer until model load.
+        from sentence_transformers import SentenceTransformer
 
         print("Loading SBERT model...")
         self.model = SentenceTransformer(model_name)

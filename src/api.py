@@ -3,8 +3,7 @@
 import os
 import io
 import threading
-from typing import List, Optional
-from contextlib import asynccontextmanager
+from typing import Any, List, Optional
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, UploadFile, File, HTTPException, Query
@@ -15,8 +14,6 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
-from .detector import PlagiarismDetector
-from .report_generator import generate_pdf_report_bytes
 from . import scan_repository
 from .supabase_client import is_supabase_configured
 
@@ -73,16 +70,17 @@ class ScanSummaryResponse(BaseModel):
 
 
 # ─────────────────────── Detector (background load) ──────── #
-# Render opens the port only after lifespan startup finishes.
-# Model load takes minutes — run it in a thread so $PORT binds immediately.
+# Render scans $PORT before heavy imports finish. Do NOT import torch/detector
+# at module level — only inside the background worker after uvicorn has bound.
 
-_detector: Optional[PlagiarismDetector] = None
+_detector: Any = None
 _detector_lock = threading.Lock()
 _loading = False
 _load_error: Optional[str] = None
+_loader_started = False
 
 
-def get_detector() -> PlagiarismDetector:
+def get_detector() -> Any:
     if _load_error:
         raise HTTPException(
             status_code=503,
@@ -99,6 +97,8 @@ def get_detector() -> PlagiarismDetector:
 def _load_detector_worker() -> None:
     global _detector, _load_error, _loading
     try:
+        from .detector import PlagiarismDetector
+
         print("Loading SBERT model and reference database...")
         detector = PlagiarismDetector()
         detector.load_database()
@@ -112,25 +112,20 @@ def _load_detector_worker() -> None:
         _loading = False
 
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    global _detector, _load_error, _loading
-    _detector = None
-    _load_error = None
+def _start_model_loader() -> None:
+    global _loader_started, _loading
+    if _loader_started:
+        return
+    _loader_started = True
     _loading = True
-    thread = threading.Thread(target=_load_detector_worker, daemon=True)
-    thread.start()
-    yield
-    with _detector_lock:
-        _detector = None
+    threading.Thread(target=_load_detector_worker, daemon=True).start()
 
 
 # ─────────────────────── App ─────────────────────────────── #
 
 app = FastAPI(
-    title    = "Plagiarism Detector API",
-    version  = "1.0.0",
-    lifespan = lifespan,          # ← replaces the old @app.on_event("startup")
+    title   = "Plagiarism Detector API",
+    version = "1.0.0",
 )
 
 app.add_middleware(
@@ -379,6 +374,8 @@ def report_from_result(request: ReportRequest):
         "results"              : results_dicts,
     }
 
+    from .report_generator import generate_pdf_report_bytes
+
     pdf_bytes = generate_pdf_report_bytes(results_dicts, summary)
 
     return StreamingResponse(
@@ -393,3 +390,6 @@ def report_from_result(request: ReportRequest):
 BASE_DIR     = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 FRONTEND_DIR = os.path.join(BASE_DIR, "frontend")
 app.mount("/", StaticFiles(directory=FRONTEND_DIR, html=True), name="frontend")
+
+# Start ML load only after the app object exists (uvicorn binds port on import exit).
+_start_model_loader()
