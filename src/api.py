@@ -2,6 +2,7 @@
 
 import os
 import io
+import threading
 from typing import List, Optional
 from contextlib import asynccontextmanager
 
@@ -71,30 +72,57 @@ class ScanSummaryResponse(BaseModel):
     created_at            : str
 
 
-# ─────────────────────── Detector (lazy) ─────────────────── #
-# Load only inside lifespan so uvicorn can bind the port first (one model load).
+# ─────────────────────── Detector (background load) ──────── #
+# Render opens the port only after lifespan startup finishes.
+# Model load takes minutes — run it in a thread so $PORT binds immediately.
 
 _detector: Optional[PlagiarismDetector] = None
+_detector_lock = threading.Lock()
+_loading = False
+_load_error: Optional[str] = None
 
 
 def get_detector() -> PlagiarismDetector:
+    if _load_error:
+        raise HTTPException(
+            status_code=503,
+            detail=f"Model failed to load: {_load_error}",
+        )
     if _detector is None:
         raise HTTPException(
             status_code=503,
-            detail="Server is still loading the model. Wait a moment and refresh.",
+            detail="Server is still loading the model. Wait 1–2 minutes and try again.",
         )
     return _detector
 
 
+def _load_detector_worker() -> None:
+    global _detector, _load_error, _loading
+    try:
+        print("Loading SBERT model and reference database...")
+        detector = PlagiarismDetector()
+        detector.load_database()
+        with _detector_lock:
+            _detector = detector
+        print("Detector ready.")
+    except Exception as exc:
+        _load_error = str(exc)
+        print(f"Detector load failed: {exc}")
+    finally:
+        _loading = False
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global _detector
-    print("Loading SBERT model and reference database...")
-    _detector = PlagiarismDetector()
-    _detector.load_database()
-    print("Detector ready.")
-    yield
+    global _detector, _load_error, _loading
     _detector = None
+    _load_error = None
+    _loading = True
+    thread = threading.Thread(target=_load_detector_worker, daemon=True)
+    thread.start()
+    yield
+    with _detector_lock:
+        _detector = None
 
 
 # ─────────────────────── App ─────────────────────────────── #
@@ -181,6 +209,8 @@ def health():
     return {
         "status": "ok",
         "model_ready": _detector is not None,
+        "loading": _loading,
+        "error": _load_error,
     }
 
 
