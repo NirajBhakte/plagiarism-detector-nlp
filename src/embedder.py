@@ -27,7 +27,7 @@ class SentenceEmbedder:
         embeddings = self.model.encode(
             sentences,
             convert_to_numpy=True,
-            show_progress_bar=True
+            show_progress_bar=False,
         )
 
         return embeddings

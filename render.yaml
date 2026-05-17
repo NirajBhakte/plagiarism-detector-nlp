@@ -1,0 +1,19 @@
+# Render Blueprint — https://render.com/docs/blueprint-spec
+# If your Git repo root is the parent folder, set rootDir: plagiarism-detector-nlp
+
+services:
+  - type: web
+    name: plagiarism-detector
+    runtime: python
+    plan: standard
+    buildCommand: bash build.sh
+    startCommand: uvicorn src.api:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.11.0"
+      - key: SAVE_SCANS_TO_SUPABASE
+        value: "true"
+      # Add in Render Dashboard (secret):
+      # SUPABASE_URL
+      # SUPABASE_SERVICE_ROLE_KEY

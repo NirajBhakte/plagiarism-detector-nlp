@@ -2,10 +2,13 @@
 
 import os
 import io
-from typing import List
+from typing import List, Optional
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, UploadFile, File, HTTPException
+from dotenv import load_dotenv
+from fastapi import FastAPI, UploadFile, File, HTTPException, Query
+
+load_dotenv()
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import StreamingResponse
@@ -13,6 +16,8 @@ from pydantic import BaseModel
 
 from .detector import PlagiarismDetector
 from .report_generator import generate_pdf_report_bytes
+from . import scan_repository
+from .supabase_client import is_supabase_configured
 
 
 # ─────────────────────── Schemas ─────────────────────────── #
@@ -45,24 +50,51 @@ class ReportRequest(BaseModel):
     results               : list[DetectResultItem]
 
 
-# ─────────────────────── Detector (lazy) ─────────────────── #
-# ✅ Instantiate the object here but do NOT call load_database() yet.
-# load_database() triggers SBERT model download + embedding build
-# which takes 30-60s and causes Render to time out before the port opens.
-# The lifespan function below calls it AFTER the port is already bound.
+class SaveScanRequest(BaseModel):
+    total_sentences       : int
+    plagiarized_sentences : int
+    plagiarism_percent    : float
+    source_breakdown      : dict[str, float] = {}
+    results               : list[DetectResultItem]
+    input_type            : str = "text"
+    label                 : Optional[str] = None
 
-detector = PlagiarismDetector()
+
+class ScanSummaryResponse(BaseModel):
+    id                    : str
+    label                 : Optional[str] = None
+    input_type            : str
+    total_sentences       : int
+    plagiarized_sentences : int
+    plagiarism_percent    : float
+    source_breakdown      : dict
+    created_at            : str
+
+
+# ─────────────────────── Detector (lazy) ─────────────────── #
+# Load only inside lifespan so uvicorn can bind the port first (one model load).
+
+_detector: Optional[PlagiarismDetector] = None
+
+
+def get_detector() -> PlagiarismDetector:
+    if _detector is None:
+        raise HTTPException(
+            status_code=503,
+            detail="Server is still loading the model. Wait a moment and refresh.",
+        )
+    return _detector
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Runs after the server binds to the port — Render sees the port immediately
-    # and won't time out while the model loads in the background.
+    global _detector
     print("Loading SBERT model and reference database...")
-    detector.load_database()
+    _detector = PlagiarismDetector()
+    _detector.load_database()
     print("Detector ready.")
     yield
-    # (anything after yield runs on shutdown — nothing needed here)
+    _detector = None
 
 
 # ─────────────────────── App ─────────────────────────────── #
@@ -104,13 +136,63 @@ def _build_response(summary: dict) -> DetectResponse:
     )
 
 
+def _should_auto_save_scans() -> bool:
+    if not is_supabase_configured():
+        return False
+    return os.getenv("SAVE_SCANS_TO_SUPABASE", "true").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+    }
+
+
+def _maybe_persist_scan(summary: dict, input_type: str) -> Optional[str]:
+    if not _should_auto_save_scans():
+        return None
+    try:
+        row = scan_repository.save_scan(summary, input_type)
+        return row.get("id")
+    except Exception as exc:
+        print(f"Warning: could not save scan to Supabase: {exc}")
+        return None
+
+
+def _summary_dict_from_response(response: DetectResponse) -> dict:
+    return {
+        "total_sentences": response.total_sentences,
+        "plagiarized_sentences": response.plagiarized_sentences,
+        "plagiarism_percent": response.plagiarism_percent,
+        "source_breakdown": response.source_breakdown,
+        "results": [
+            {
+                "Student Sentence": r.student_sentence,
+                "Matched Source": r.matched_source,
+                "Source File": r.source_file,
+                "Similarity Score": r.similarity_score,
+                "Category": r.category,
+            }
+            for r in response.results
+        ],
+    }
+
+
+@app.get("/health")
+def health():
+    return {
+        "status": "ok",
+        "model_ready": _detector is not None,
+    }
+
+
 # ─────────────────────── Detection Endpoints ─────────────── #
 
 @app.post("/api/detect", response_model=DetectResponse)
 def detect_text(request: DetectRequest):
     if not request.text.strip():
         raise HTTPException(status_code=400, detail="Text cannot be empty.")
-    return _build_response(detector.detect_from_text(request.text))
+    summary = get_detector().detect_from_text(request.text)
+    _maybe_persist_scan(summary, "text")
+    return _build_response(summary)
 
 
 @app.post("/api/detect-file", response_model=DetectResponse)
@@ -122,11 +204,12 @@ async def detect_file(file: UploadFile = File(...)):
     if not file_bytes:
         raise HTTPException(status_code=400, detail="Uploaded file is empty.")
     try:
-        summary = detector.detect_from_bytes(file_bytes, filename)
+        summary = get_detector().detect_from_bytes(file_bytes, filename)
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Processing error: {e}")
+    _maybe_persist_scan(summary, "file")
     return _build_response(summary)
 
 
@@ -157,7 +240,7 @@ async def detect_with_reference(
         raise HTTPException(status_code=400, detail="No valid reference files provided.")
 
     try:
-        summary = detector.detect_with_dynamic_references(
+        summary = get_detector().detect_with_dynamic_references(
             student_bytes    = s_bytes,
             student_filename = student_file.filename or "student.txt",
             reference_files  = ref_data_list,
@@ -166,7 +249,81 @@ async def detect_with_reference(
         raise HTTPException(status_code=422, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Processing error: {e}")
+    _maybe_persist_scan(summary, "with_reference")
     return _build_response(summary)
+
+
+# ─────────────────────── Supabase scan history ─────────────── #
+
+@app.get("/api/supabase/status")
+def supabase_status():
+    return {
+        "configured": is_supabase_configured(),
+        "auto_save": _should_auto_save_scans(),
+    }
+
+
+@app.post("/api/scans")
+def create_scan(request: SaveScanRequest):
+    if not is_supabase_configured():
+        raise HTTPException(
+            status_code=503,
+            detail="Supabase is not configured. Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY.",
+        )
+    summary = _summary_dict_from_response(
+        DetectResponse(
+            total_sentences=request.total_sentences,
+            plagiarized_sentences=request.plagiarized_sentences,
+            plagiarism_percent=request.plagiarism_percent,
+            source_breakdown=request.source_breakdown,
+            results=request.results,
+        )
+    )
+    try:
+        row = scan_repository.save_scan(
+            summary,
+            request.input_type,
+            request.label,
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    return row
+
+
+@app.get("/api/scans", response_model=list[ScanSummaryResponse])
+def list_scans(limit: int = Query(50, ge=1, le=100)):
+    if not is_supabase_configured():
+        raise HTTPException(status_code=503, detail="Supabase is not configured.")
+    try:
+        rows = scan_repository.list_scans(limit=limit)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    return [
+        ScanSummaryResponse(
+            id=row["id"],
+            label=row.get("label"),
+            input_type=row["input_type"],
+            total_sentences=row["total_sentences"],
+            plagiarized_sentences=row["plagiarized_sentences"],
+            plagiarism_percent=row["plagiarism_percent"],
+            source_breakdown=row.get("source_breakdown") or {},
+            created_at=row["created_at"],
+        )
+        for row in rows
+    ]
+
+
+@app.get("/api/scans/{scan_id}")
+def get_scan(scan_id: str):
+    if not is_supabase_configured():
+        raise HTTPException(status_code=503, detail="Supabase is not configured.")
+    try:
+        row = scan_repository.get_scan(scan_id)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    if not row:
+        raise HTTPException(status_code=404, detail="Scan not found.")
+    return row
 
 
 # ─────────────────────── Report Endpoint ─────────────────── #

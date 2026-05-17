@@ -13,7 +13,6 @@ from .preprocess import (
 )
 from .embedder import SentenceEmbedder
 from .similarity import find_best_matches
-from .report_generator import generate_pdf_report   # ✅ FIX: was "from .report" — correct module name
 
 
 # ─────────────────────── CONFIG ─────────────────────────── #
@@ -245,18 +244,13 @@ class PlagiarismDetector:
             for src, count in source_matches.items()
         }
 
-        summary_dict = {
+        return {
             "total_sentences"      : total,
             "plagiarized_sentences": plag_count,
             "plagiarism_percent"   : plagiarism_percent,
             "source_breakdown"     : source_breakdown,
             "results"              : results,
         }
-
-        # Auto-generate PDF report
-        generate_pdf_report(results, summary_dict)
-
-        return summary_dict
 
     # ─────────────────────────────────────────────────────── #
     #  ENTRY POINT 1 — CLI
