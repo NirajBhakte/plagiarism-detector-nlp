@@ -89,7 +89,7 @@ def get_detector() -> Any:
     if _detector is None:
         raise HTTPException(
             status_code=503,
-            detail="Server is still loading the model. Wait 1–2 minutes and try again.",
+            detail="Server is still loading the model. Wait 3–5 minutes after deploy, then try again.",
         )
     return _detector
 

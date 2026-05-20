@@ -34,6 +34,41 @@ const downloadReportBtn    = document.getElementById("download-report-btn");
 
 let selectedFile     = null;
 let selectedRefFiles = [];
+let modelReady       = false;
+
+// ── Wait for backend ML model (Render / cold start can take several minutes) ──
+async function pollModelHealth() {
+    try {
+        const res  = await fetch("/health");
+        const data = await res.json();
+
+        if (data.model_ready) {
+            modelReady = true;
+            runButton.disabled = false;
+            setStatus("");
+            return;
+        }
+
+        if (data.error) {
+            runButton.disabled = true;
+            setStatus(`Model failed to load on server: ${data.error}`, true);
+            return;
+        }
+
+        runButton.disabled = true;
+        setStatus(
+            "Loading AI model… First start can take 3–5 minutes on free hosting. Please wait.",
+            false
+        );
+    } catch (_) {
+        runButton.disabled = true;
+        setStatus("Connecting to server…", false);
+    }
+
+    setTimeout(pollModelHealth, 5000);
+}
+
+pollModelHealth();
 
 // ── Store the last detection result (JSON) for report generation ──
 // We store the actual API response data, NOT the request payload.
@@ -358,6 +393,11 @@ form.addEventListener("submit", async (event) => {
 
     if (!text && !selectedFile) {
         setStatus("Please provide a student document (paste text or upload a file).", true);
+        return;
+    }
+
+    if (!modelReady) {
+        setStatus("The AI model is still loading. Please wait until the status message clears.", true);
         return;
     }
 
