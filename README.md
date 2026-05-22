@@ -20,7 +20,7 @@ Unlike traditional plagiarism tools that rely only on keyword matching, this sys
 
 | Layer | URL |
 |-------|-----|
-| 🖥️ Frontend (Vercel) | *(your Vercel URL)* |
+| 🖥️ Frontend (Vercel) | (https://plagiarism-detector-nlp.vercel.app/) |
 | ⚙️ Backend API (HuggingFace) | https://nayan2305-plagiarism-detector.hf.space |
 | 📋 API Health Check | https://nayan2305-plagiarism-detector.hf.space/health |
 
