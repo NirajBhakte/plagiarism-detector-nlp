@@ -1,3 +1,6 @@
+// ── Backend URL — points to HuggingFace Space deployment ──
+const API_BASE = "https://nayan2305-plagiarism-detector.hf.space";
+
 const form         = document.getElementById("detect-form");
 const textArea     = document.getElementById("text");
 const runButton    = document.getElementById("run-button");
@@ -39,7 +42,7 @@ let modelReady       = false;
 // ── Wait for backend ML model (Render / cold start can take several minutes) ──
 async function pollModelHealth() {
     try {
-        const res  = await fetch("/health");
+        const res  = await fetch(`${API_BASE}/health`);
         const data = await res.json();
 
         if (data.model_ready) {
@@ -357,7 +360,7 @@ if (downloadReportBtn) {
 
         try {
             // Send the full result JSON to the new /api/report-from-result endpoint
-            const response = await fetch("/api/report-from-result", {
+            const response = await fetch(`${API_BASE}/api/report-from-result`, {
                 method  : "POST",
                 headers : { "Content-Type": "application/json" },
                 body    : JSON.stringify(lastDetectionResult),
@@ -423,7 +426,7 @@ form.addEventListener("submit", async (event) => {
             }
             selectedRefFiles.forEach(f => formData.append("reference_files", f));
 
-            response = await fetch("/api/detect-with-reference", {
+            response = await fetch(`${API_BASE}/api/detect-with-reference`, {
                 method: "POST",
                 body  : formData,
             });
@@ -433,14 +436,14 @@ form.addEventListener("submit", async (event) => {
             const formData = new FormData();
             formData.append("file", selectedFile);
 
-            response = await fetch("/api/detect-file", {
+            response = await fetch(`${API_BASE}/api/detect-file`, {
                 method: "POST",
                 body  : formData,
             });
 
         } else {
             // Mode C: student text vs pre-loaded database
-            response = await fetch("/api/detect", {
+            response = await fetch(`${API_BASE}/api/detect`, {
                 method : "POST",
                 headers: { "Content-Type": "application/json" },
                 body   : JSON.stringify({ text }),
