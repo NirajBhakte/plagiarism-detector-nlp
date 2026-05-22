@@ -59,9 +59,9 @@ COPY frontend/  ./frontend/
 COPY data/      ./data/
 
 # Optional: copy database / embeddings directories if they exist and are needed
-# (comment out if you generate these at runtime instead)
-COPY database/   ./database/
-COPY embeddings/ ./embeddings/
+# Uncomment the lines below if you have these directories in your repo
+# COPY database/   ./database/
+# COPY embeddings/ ./embeddings/
 
 # Environment variables
 ENV PYTHONDONTWRITEBYTECODE=1 \
