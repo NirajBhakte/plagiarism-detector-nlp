@@ -16,16 +16,27 @@ Unlike traditional plagiarism tools that rely only on keyword matching, this sys
 
 ---
 
+## 🌐 Live Demo
+
+| Layer | URL |
+|-------|-----|
+| 🖥️ Frontend (Vercel) | *(your Vercel URL)* |
+| ⚙️ Backend API (HuggingFace) | https://nayan2305-plagiarism-detector.hf.space |
+| 📋 API Health Check | https://nayan2305-plagiarism-detector.hf.space/health |
+
+---
+
 ## 🚀 Features
 
 - Detects **Copied, Paraphrased, and Original** sentences
 - Supports **PDF and TXT file uploads**
+- **Compare against uploaded reference files** (dynamic mode)
 - **Semantic similarity detection** using Sentence Transformers
-- Sentence-level plagiarism analysis
-- **Cosine similarity scoring**
+- Sentence-level plagiarism analysis with **cosine similarity scoring**
+- **PDF report generation** with full breakdown
+- **Scan history** stored in Supabase
 - Interactive **modern web interface**
-- Detailed plagiarism summary and sentence comparison
-- CSV report generation
+- Dockerized for easy deployment
 
 ---
 
@@ -48,22 +59,29 @@ Unlike traditional plagiarism tools that rely only on keyword matching, this sys
 ## 🛠️ Tech Stack
 
 ### Backend
-- Python
+- Python 3.11
 - FastAPI
-- Sentence Transformers
+- Uvicorn
+- Sentence Transformers (`all-mpnet-base-v2`)
 - PyTorch
 - Scikit-Learn
 - NLTK
-- Pandas
-- NumPy
+- pdfplumber (PDF parsing)
+- ReportLab (PDF report generation)
+- Pandas / NumPy
 
 ### Frontend
 - HTML
 - CSS
-- JavaScript
+- JavaScript (deployed on Vercel)
 
-### NLP Model
-- `all-mpnet-base-v2` (Sentence Transformers)
+### Storage & Database
+- Supabase (scan history)
+
+### DevOps
+- Docker
+- HuggingFace Spaces (backend)
+- Vercel (frontend)
 
 ---
 
@@ -73,11 +91,14 @@ Unlike traditional plagiarism tools that rely only on keyword matching, this sys
 plagiarism-detector-nlp
 │
 ├── src/
-│   ├── api.py
-│   ├── detector.py
-│   ├── embedder.py
-│   ├── preprocess.py
-│   └── similarity.py
+│   ├── api.py                 # FastAPI app & all endpoints
+│   ├── detector.py            # Core plagiarism detection logic
+│   ├── embedder.py            # Sentence embedding wrapper
+│   ├── preprocess.py          # Text cleaning & tokenization
+│   ├── similarity.py          # Cosine similarity helpers
+│   ├── report_generator.py    # PDF report generation
+│   ├── scan_repository.py     # Supabase scan history CRUD
+│   └── supabase_client.py     # Supabase client setup
 │
 ├── frontend/
 │   ├── index.html
@@ -85,18 +106,45 @@ plagiarism-detector-nlp
 │   └── styles.css
 │
 ├── data/
-│   └── reference_texts/
+│   └── reference_texts/       # Pre-loaded reference documents
 │
-├── reports/
-│   └── results.csv
+├── database/
+│   └── migrations/
 │
+├── embeddings/
+│   └── db_embeddings.pkl      # Pre-computed reference embeddings
+│
+├── Dockerfile                 # Docker image definition
+├── build.sh                   # Pre-downloads model & NLTK data
+├── start.sh                   # Starts uvicorn server
+├── runtime.txt                # Python version (3.11)
 ├── requirements.txt
+├── .env.example               # Environment variable template
 └── README.md
 ```
 
 ---
 
-## ⚙️ Installation
+## 🔑 Environment Variables
+
+Copy `.env.example` to `.env` and fill in your values:
+
+```bash
+cp .env.example .env
+```
+
+| Variable | Description | Required |
+|----------|-------------|----------|
+| `SUPABASE_URL` | Your Supabase project URL | Optional |
+| `SUPABASE_SERVICE_ROLE_KEY` | Supabase service role key | Optional |
+| `SAVE_SCANS_TO_SUPABASE` | Auto-save scans (`true`/`false`) | Optional |
+| `PORT` | Server port (default: `8000`) | Optional |
+
+> Supabase is optional — the detector works without it. Scan history features require it.
+
+---
+
+## ⚙️ Local Installation
 
 Clone the repository:
 
@@ -105,23 +153,15 @@ git clone https://github.com/NirajBhakte/plagiarism-detector-nlp.git
 cd plagiarism-detector-nlp
 ```
 
-Create virtual environment:
+Create and activate virtual environment:
 
 ```bash
+# Windows
 python -m venv venv
-```
-
-Activate environment:
-
-### Windows
-
-```bash
 venv\Scripts\activate
-```
 
-### Linux / Mac
-
-```bash
+# Linux / Mac
+python -m venv venv
 source venv/bin/activate
 ```
 
@@ -131,17 +171,21 @@ Install dependencies:
 pip install -r requirements.txt
 ```
 
----
-
-## ▶️ Running the Project
-
-Start the FastAPI server:
+Download NLTK data:
 
 ```bash
-uvicorn src.api:app --reload
+python -c "import nltk; nltk.download('punkt'); nltk.download('punkt_tab')"
 ```
 
-Open the application in browser:
+---
+
+## ▶️ Running Locally
+
+```bash
+python -m uvicorn src.api:app --host 0.0.0.0 --port 8000 --reload
+```
+
+Open in browser:
 
 ```
 http://127.0.0.1:8000
@@ -149,25 +193,85 @@ http://127.0.0.1:8000
 
 ---
 
+## 🐳 Running with Docker
+
+Build the image:
+
+```bash
+docker build -t plagiarism-detector .
+```
+
+Run the container:
+
+```bash
+docker run -p 8000:8000 --env-file .env plagiarism-detector
+```
+
+Open in browser:
+
+```
+http://localhost:8000
+```
+
+---
+
 ## 📄 API Endpoints
 
-### Detect Plagiarism from Text
+### Health Check
+```
+GET /health
+```
+Returns model load status.
 
+---
+
+### Detect Plagiarism from Text
 ```
 POST /api/detect
+Content-Type: application/json
+
+{ "text": "Your student text here..." }
 ```
+
+---
 
 ### Detect Plagiarism from File
-
 ```
 POST /api/detect-file
+Content-Type: multipart/form-data
+
+file: <.pdf or .txt file>
 ```
 
-Supported formats:
+---
 
+### Detect with Uploaded Reference Files
 ```
-.txt
-.pdf
+POST /api/detect-with-reference
+Content-Type: multipart/form-data
+
+student_file:    <.pdf or .txt>
+reference_files: <one or more .pdf or .txt files>
+```
+
+---
+
+### Generate PDF Report
+```
+POST /api/report-from-result
+Content-Type: application/json
+
+{ ...detection result JSON... }
+```
+Returns a downloadable PDF report.
+
+---
+
+### Scan History (requires Supabase)
+```
+GET  /api/scans          # List recent scans
+GET  /api/scans/{id}     # Get a specific scan
+POST /api/scans          # Save a scan manually
 ```
 
 ---
@@ -176,9 +280,22 @@ Supported formats:
 
 | Sentence | Score | Category |
 |--------|--------|--------|
-Artificial intelligence is transforming industries. | 0.99 | Copied |
-Many organizations are adopting AI technology. | 0.82 | Paraphrased |
-Reading books improves creativity. | 0.12 | Original |
+| Artificial intelligence is transforming industries. | 0.99 | Copied |
+| Many organizations are adopting AI technology. | 0.82 | Paraphrased |
+| Reading books improves creativity. | 0.12 | Original |
+
+---
+
+## 🚢 Deployment
+
+### Backend → HuggingFace Spaces (Docker)
+- SDK: Docker
+- Port: `7860`
+- Set secrets in HF Space Settings: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`
+
+### Frontend → Vercel
+- Deploy the `frontend/` folder
+- Update `API_BASE` in `main.js` to point to your HF Space URL
 
 ---
 
@@ -188,6 +305,7 @@ Reading books improves creativity. | 0.12 | Original |
 - **Nayan Dhanorkar**
 - **Mitesh Wani**
 - **Maithily Patle**
+
 ---
 
 ## 📌 Future Improvements
@@ -195,8 +313,7 @@ Reading books improves creativity. | 0.12 | Original |
 - OCR support for scanned PDFs
 - Large-scale vector database integration
 - Real-time plagiarism highlighting
-- Multi-document comparison
-- Cloud deployment with scalable architecture
+- Multi-document batch comparison
 
 ---
 
