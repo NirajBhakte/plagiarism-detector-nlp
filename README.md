@@ -1,3 +1,13 @@
+---
+title: Plagiarism Detector API
+emoji: 🔍
+colorFrom: blue
+colorTo: purple
+sdk: docker
+app_port: 7860
+pinned: false
+---
+
 # 🛡️ AI-Powered Plagiarism Detector
 
 A semantic plagiarism detection system that identifies **Copied**, **Paraphrased**, and **Original** content using **Sentence-BERT embeddings** and **cosine similarity**.
