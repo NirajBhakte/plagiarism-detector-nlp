@@ -20,7 +20,7 @@ Unlike traditional plagiarism tools that rely only on keyword matching, this sys
 
 | Layer | URL |
 |-------|-----|
-| 🖥️ Frontend (Vercel) | *(your Vercel URL)* |
+| 🖥️ Frontend (Vercel) | https://plagiarism-detector-nlp.vercel.app/ |
 | ⚙️ Backend API (HuggingFace) | https://nayan2305-plagiarism-detector.hf.space |
 | 📋 API Health Check | https://nayan2305-plagiarism-detector.hf.space/health |
 
@@ -125,7 +125,7 @@ plagiarism-detector-nlp
 
 ---
 
-## 🔑 Environment Variables
+<!-- ## 🔑 Environment Variables
 
 Copy `.env.example` to `.env` and fill in your values:
 
@@ -140,7 +140,7 @@ cp .env.example .env
 | `SAVE_SCANS_TO_SUPABASE` | Auto-save scans (`true`/`false`) | Optional |
 | `PORT` | Server port (default: `8000`) | Optional |
 
-> Supabase is optional — the detector works without it. Scan history features require it.
+> Supabase is optional — the detector works without it. Scan history features require it. -->
 
 ---
 
@@ -311,9 +311,6 @@ POST /api/scans          # Save a scan manually
 ## 📌 Future Improvements
 
 - OCR support for scanned PDFs
-- Large-scale vector database integration
-- Real-time plagiarism highlighting
-- Multi-document batch comparison
 
 ---
 
